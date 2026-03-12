@@ -58,27 +58,92 @@ architecture test_bench of thunderbird_fsm_tb is
 	
 	component thunderbird_fsm is 
 --	  port(
-		
+      port (
+        i_clk, i_reset  : in    std_logic;
+        i_left, i_right : in    std_logic;
+        o_lights_L      : out   std_logic_vector(2 downto 0);
+        o_lights_R      : out   std_logic_vector(2 downto 0)
+    );
 --	  );
 	end component thunderbird_fsm;
 
 	-- test I/O signals
+	--Inputs
+	signal w_left : std_logic := '0'; -- RYG one-hot
+	signal w_right : std_logic := '0'; -- RYG one-hot
+	signal w_reset : std_logic := '0';
+	signal w_clk : std_logic := '0';
 	
+	--Outputs
+	signal w_lights_L : std_logic_vector(2 downto 0) := "000"; -- RYG one-hot
+	signal w_lights_R : std_logic_vector(2 downto 0) := "000"; -- RYG one-hot
 	-- constants
-	
+	constant k_clk_period : time := 10 ns; -- Clock period definitions
 	
 begin
 	-- PORT MAPS ----------------------------------------
-	
+    uut: thunderbird_fsm port map (
+        i_clk => w_clk,
+        i_reset => w_reset,
+        i_left => w_left,
+        i_right => w_right,
+        o_lights_L => w_lights_L,
+        o_lights_R(2) => w_lights_R(0),
+        o_lights_R(1) => w_lights_R(1),
+        o_lights_R(0) => w_lights_R(2)
+
+    );
 	-----------------------------------------------------
 	
 	-- PROCESSES ----------------------------------------	
     -- Clock process ------------------------------------
-    
+    clk_proc : process
+	begin
+		w_clk <= '0';
+        wait for k_clk_period/2;
+		w_clk <= '1';
+		wait for k_clk_period/2;
+	end process;
 	-----------------------------------------------------
 	
 	-- Test Plan Process --------------------------------
-	
+	sim_proc: process
+	begin
+		-- sequential timing		
+		w_reset <= '1';
+		wait for k_clk_period*1;
+		  assert ((w_lights_L = "000") and (w_lights_R = "000")) report "bad reset" severity failure;
+		w_reset <= '0';
+		wait for k_clk_period*1;
+		  assert ((w_lights_L = "000") and (w_lights_R = "000")) report "bad no reset" severity failure;
+		-- left switch
+		w_left <= '1'; wait for k_clk_period;
+          assert ((w_lights_L = "001") and (w_lights_R = "000")) report "should be stage 1: single left light" severity failure;
+        wait for k_clk_period;
+          assert ((w_lights_L = "011") and (w_lights_R = "000")) report "should be stage 2: two left lights" severity failure;
+        wait for k_clk_period;
+          assert ((w_lights_L = "111") and (w_lights_R = "000")) report "should be stage 3: three left lights" severity failure;
+        wait for k_clk_period;
+          assert ((w_lights_L = "000") and (w_lights_R = "000")) report "should be stage 0: Off after left" severity failure;
+         -- right switch
+          w_right <= '1'; w_left <= '0';  wait for k_clk_period;
+          assert ((w_lights_R = "100") and (w_lights_L = "000")) report "should be stage 1: single right light" severity failure;
+        wait for k_clk_period;
+          assert ((w_lights_R = "110") and (w_lights_L = "000")) report "should be stage 2: two right lights" severity failure;
+        wait for k_clk_period;
+          assert ((w_lights_R = "111") and (w_lights_L = "000")) report "should be stage 3: three right lights" severity failure;
+        wait for k_clk_period;
+          assert ((w_lights_R = "000") and (w_lights_L = "000")) report "should be stage 0: Off after right" severity failure;
+          -- both switch
+          w_left <= '1'; w_right <= '1'; wait for k_clk_period;
+          assert ((w_lights_R = "111") and (w_lights_L = "111")) report "Failed Hazard Lights" severity failure;
+        wait for k_clk_period;
+          assert ((w_lights_R = "000") and (w_lights_L = "000")) report "Failed Hazard Off" severity failure;
+        -- reset and test yellow to red even if car
+        w_reset <= '1'; w_left <= '1'; w_right <= '1'; wait for k_clk_period;
+          assert ((w_lights_R = "000") and (w_lights_L = "000")) report "Failed Reset and Inputs" severity failure;
+		wait;
+	end process;
 	-----------------------------------------------------	
 	
 end test_bench;
